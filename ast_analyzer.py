@@ -70,11 +70,36 @@ class LuigiWorkflowAnalyzer:
         """Traite la méthode requires() pour extraire les dépendances."""
         try:
             # Parcourir l'AST de la méthode requires
-            for node in method_node.nodes_of_class(astroid.Return):
-                # Analyser la valeur de retour
-                self._analyze_return_value(node.value, task_name)
+            for node in method_node.nodes_of_class((astroid.Return, astroid.If)):
+                if isinstance(node, astroid.Return):
+                    # Analyser la valeur de retour
+                    self._analyze_return_value(node.value, task_name)
+                elif isinstance(node, astroid.If):
+                    # Analyser les branches conditionnelles
+                    self._analyze_conditional_return(node, task_name)
         except Exception as e:
             self.logger.warning(f"Erreur lors du traitement des dépendances de {task_name}: {str(e)}")
+
+    def _analyze_conditional_return(self, if_node: astroid.If, task_name: str) -> None:
+        """Analyse les retours conditionnels dans une structure if/elif/else."""
+        try:
+            # Analyser le bloc if
+            for node in if_node.body:
+                if isinstance(node, astroid.Return):
+                    self._analyze_return_value(node.value, task_name)
+                elif isinstance(node, astroid.If):
+                    self._analyze_conditional_return(node, task_name)
+
+            # Analyser le bloc else
+            if if_node.orelse:
+                for node in if_node.orelse:
+                    if isinstance(node, astroid.Return):
+                        self._analyze_return_value(node.value, task_name)
+                    elif isinstance(node, astroid.If):
+                        self._analyze_conditional_return(node, task_name)
+
+        except Exception as e:
+            self.logger.warning(f"Erreur lors de l'analyse des conditions pour {task_name}: {str(e)}")
 
     def _analyze_return_value(self, node: astroid.NodeNG, task_name: str) -> None:
         """Analyse la valeur de retour de requires() pour trouver les dépendances."""
@@ -109,6 +134,11 @@ class LuigiWorkflowAnalyzer:
                 if node.func.name in ('list', 'tuple', 'dict'):
                     for arg in node.args:
                         self._analyze_return_value(arg, task_name)
+
+            elif isinstance(node, astroid.IfExp):
+                # Cas d'une expression conditionnelle: return TaskA() if condition else TaskB()
+                self._analyze_return_value(node.body, task_name)
+                self._analyze_return_value(node.orelse, task_name)
 
         except Exception as e:
             self.logger.warning(f"Erreur lors de l'analyse de la valeur de retour: {str(e)}")

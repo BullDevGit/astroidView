@@ -1,0 +1,5 @@
+astroid==3.0.1
+luigi==3.3.0
+flask==3.0.2
+networkx==3.2.1
+pyvis==0.3.2 

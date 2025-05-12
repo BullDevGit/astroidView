@@ -42,7 +42,6 @@ class LuigiWorkflowAnalyzer:
         except (ImportError, AttributeError) as e:
             self.missing_modules.add(module_path)
             self.logger.warning(f"Module non trouvé: {module_path} - {str(e)}")
-            # On continue l'analyse avec les informations disponibles
 
     def _analyze_task_recursive(self, task_class) -> None:
         """Analyse récursivement une tâche et ses dépendances."""
@@ -74,19 +73,32 @@ class LuigiWorkflowAnalyzer:
             if hasattr(task_class, 'requires'):
                 try:
                     requires = task_class.requires()
-                    if isinstance(requires, (list, tuple)):
-                        for req in requires:
-                            self.tasks[task_name].add(req.__name__)
-                            self.requires_relations.append((task_name, req.__name__))
-                            self._analyze_task_recursive(req)
-                    elif requires is not None:
-                        self.tasks[task_name].add(requires.__name__)
-                        self.requires_relations.append((task_name, requires.__name__))
-                        self._analyze_task_recursive(requires)
+                    if requires is not None:
+                        if isinstance(requires, (list, tuple)):
+                            # Cas d'une liste ou d'un tuple de tâches
+                            for req in requires:
+                                self._add_dependency(task_name, req)
+                        elif isinstance(requires, dict):
+                            # Cas d'un dictionnaire de tâches
+                            for req in requires.values():
+                                self._add_dependency(task_name, req)
+                        else:
+                            # Cas d'une tâche unique
+                            self._add_dependency(task_name, requires)
                 except Exception as e:
                     self.logger.warning(f"Erreur lors de l'analyse des dépendances de {task_name}: {str(e)}")
         except Exception as e:
             self.logger.warning(f"Erreur lors de l'analyse de la tâche: {str(e)}")
+
+    def _add_dependency(self, task_name: str, required_task) -> None:
+        """Ajoute une dépendance et analyse récursivement la tâche requise."""
+        try:
+            req_name = required_task.__name__
+            self.tasks[task_name].add(req_name)
+            self.requires_relations.append((task_name, req_name))
+            self._analyze_task_recursive(required_task)
+        except Exception as e:
+            self.logger.warning(f"Erreur lors de l'ajout de la dépendance {required_task} à {task_name}: {str(e)}")
 
     def _process_module(self, module: astroid.Module) -> None:
         """Traite un module AST pour trouver les tâches Luigi."""
@@ -118,9 +130,18 @@ class LuigiWorkflowAnalyzer:
             for node in astroid.walk(method_node):
                 if isinstance(node, astroid.Call):
                     if isinstance(node.func, astroid.Name):
+                        # Cas d'une tâche unique
                         required_task = node.func.name
                         self.tasks[task_name].add(required_task)
                         self.requires_relations.append((task_name, required_task))
+                    elif isinstance(node.func, astroid.Attribute):
+                        if node.func.attrname in ('list', 'tuple', 'dict'):
+                            # Cas d'une liste, tuple ou dict de tâches
+                            for arg in node.args:
+                                if isinstance(arg, astroid.Call) and isinstance(arg.func, astroid.Name):
+                                    required_task = arg.func.name
+                                    self.tasks[task_name].add(required_task)
+                                    self.requires_relations.append((task_name, required_task))
         except Exception as e:
             self.logger.warning(f"Erreur lors du traitement des dépendances de {task_name}: {str(e)}")
 

@@ -139,7 +139,11 @@
                 if (data.error) {
                     status.innerHTML = `<div class="alert alert-danger">${data.error}</div>`;
                 } else {
-                    status.innerHTML = '<div class="alert alert-success">Analyse terminée avec succès</div>';
+                    let statusHtml = '<div class="alert alert-success">Analyse terminée avec succès</div>';
+                    if (data.warning) {
+                        statusHtml += `<div class="alert alert-warning">${data.warning}</div>`;
+                    }
+                    status.innerHTML = statusHtml;
                     // Recharger le graphe
                     graphFrame.src = '/templates/graph.html?' + new Date().getTime();
                 }

@@ -2,6 +2,11 @@ from flask import Flask, render_template, request, jsonify
 from ast_analyzer import LuigiWorkflowAnalyzer
 from graph_generator import GraphGenerator
 import os
+import logging
+
+# Configuration du logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
 
@@ -50,13 +55,23 @@ def analyze():
         # Génération de la visualisation
         graph_gen.generate_html()
         
-        return jsonify({
+        # Préparation de la réponse
+        response = {
             'success': True,
             'message': 'Analyse terminée avec succès',
             'dependencies': analyzer.get_dependencies()
-        })
+        }
+
+        # Ajout des modules manquants s'il y en a
+        missing_modules = analyzer.get_missing_modules()
+        if missing_modules:
+            response['warning'] = f"Certains modules n'ont pas pu être analysés : {', '.join(missing_modules)}"
+            logger.warning(f"Modules manquants : {missing_modules}")
+
+        return jsonify(response)
     
     except Exception as e:
+        logger.error(f"Erreur lors de l'analyse : {str(e)}")
         return jsonify({'error': str(e)}), 500
 
 if __name__ == '__main__':

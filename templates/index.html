@@ -39,17 +39,8 @@
 </head>
 <body>
     <div class="container mt-4">
-        <h1 class="mb-4">Analyseur de Workflow Luigi</h1>
+        <h3 class="mb-4">Analyseur de Workflow Luigi</h3>
         
-        <div class="info-box">
-            <h5>Comment utiliser l'analyseur :</h5>
-            <ol>
-                <li>Entrez le chemin complet vers votre projet Luigi</li>
-                <li>Spécifiez le chemin complet de la tâche principale (ex: <code>mon_projet.tasks.MaTachePrincipale</code>)</li>
-                <li>Cliquez sur "Analyser" pour générer le graphe de dépendances</li>
-            </ol>
-        </div>
-
         <div class="row">
             <div class="col-md-6">
                 <div class="card">
@@ -189,11 +180,16 @@
 
                 // Fonction pour réinitialiser les styles
                 function resetStyles() {
+                    // Créer un ensemble des tâches qui sont des dépendances
+                    const dependentTasks = new Set();
+                    edges.forEach(edge => {
+                        dependentTasks.add(edge.to);
+                    });
+
                     nodes.forEach(node => {
                         // Restaurer la couleur d'origine en fonction du type de tâche
-                        const originalColor = node.id === data.nodes[0].id ? '#4CAF50' : // Tâche principale
-                                           node.id === data.nodes[data.nodes.length - 1].id ? '#FFC107' : // Tâche finale
-                                           '#2196F3'; // Tâche dépendante
+                        const originalColor = dependentTasks.has(node.id) ? '#2196F3' : // Tâche dépendante
+                                           '#FFC107'; // Tâche sans dépendances
                         
                         nodes.update({
                             id: node.id,

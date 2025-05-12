@@ -1,24 +1,11 @@
-from flask import Flask, render_template, request, jsonify, send_from_directory
+from flask import Flask, request, jsonify, render_template
 from ast_analyzer import LuigiWorkflowAnalyzer
-from graph_generator import GraphGenerator
 import os
 import logging
 
-# Configuration du logging
+app = Flask(__name__)
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
-
-app = Flask(__name__, static_folder='static')
-
-def convert_sets_to_lists(data):
-    """Convertit récursivement tous les ensembles en listes."""
-    if isinstance(data, set):
-        return list(data)
-    elif isinstance(data, dict):
-        return {k: convert_sets_to_lists(v) for k, v in data.items()}
-    elif isinstance(data, list):
-        return [convert_sets_to_lists(item) for item in data]
-    return data
 
 @app.route('/')
 def index():
@@ -26,63 +13,62 @@ def index():
 
 @app.route('/analyze', methods=['POST'])
 def analyze():
-    analyzer = LuigiWorkflowAnalyzer()
-    graph_gen = GraphGenerator()
-
     try:
-        if 'file' in request.files:
-            # Analyse d'un fichier unique
-            file = request.files['file']
-            if file.filename == '':
-                return jsonify({'error': 'Aucun fichier sélectionné'}), 400
+        data = request.get_json()
+        project_path = data.get('project_path')
+        main_task = data.get('main_task')
 
-            temp_path = 'temp_workflow.py'
-            file.save(temp_path)
-            try:
-                analyzer.analyze_file(temp_path)
-            finally:
-                if os.path.exists(temp_path):
-                    os.remove(temp_path)
+        if not project_path or not main_task:
+            return jsonify({'error': 'Chemin du projet et tâche principale requis'}), 400
 
-        elif 'project_path' in request.form and 'main_task' in request.form:
-            # Analyse d'un projet complet
-            project_path = request.form['project_path']
-            main_task = request.form['main_task']
+        if not os.path.exists(project_path):
+            return jsonify({'error': f'Le chemin du projet n\'existe pas: {project_path}'}), 400
 
-            if not os.path.exists(project_path):
-                return jsonify({'error': 'Le chemin du projet n\'existe pas'}), 400
+        analyzer = LuigiWorkflowAnalyzer()
+        analyzer.analyze_project(project_path, main_task)
 
-            analyzer.analyze_project(project_path, main_task)
-        else:
-            return jsonify({'error': 'Paramètres manquants'}), 400
-
-        # Génération du graphe
-        graph_gen.add_relations(analyzer.get_relations())
+        # Préparer les données pour vis.js
+        nodes = []
+        edges = []
         
-        # Création des dossiers nécessaires
-        os.makedirs('static', exist_ok=True)
-        
-        # Génération de la visualisation
-        graph_gen.generate_html()
-        
-        # Préparation de la réponse
-        dependencies = convert_sets_to_lists(analyzer.get_dependencies())
-        response = {
-            'success': True,
-            'message': 'Analyse terminée avec succès',
-            'dependencies': dependencies
-        }
+        # Créer les nœuds
+        for task_name in analyzer.tasks.keys():
+            node = {
+                'id': task_name,
+                'label': task_name,
+                'color': {
+                    'background': '#2196F3',  # Bleu par défaut
+                    'border': '#1976D2'
+                }
+            }
+            
+            # Marquer la tâche principale
+            if task_name == main_task.split('.')[-1]:
+                node['color']['background'] = '#4CAF50'  # Vert
+                node['color']['border'] = '#388E3C'
+            
+            # Marquer les tâches finales (sans dépendances)
+            if not any(edge[1] == task_name for edge in analyzer.requires_relations):
+                node['color']['background'] = '#FFC107'  # Jaune
+                node['color']['border'] = '#FFA000'
+            
+            nodes.append(node)
 
-        # Ajout des modules manquants s'il y en a
-        missing_modules = analyzer.get_missing_modules()
-        if missing_modules:
-            response['warning'] = f"Certains modules n'ont pas pu être analysés : {', '.join(missing_modules)}"
-            logger.warning(f"Modules manquants : {missing_modules}")
+        # Créer les arêtes
+        for source, target in analyzer.requires_relations:
+            edges.append({
+                'from': source,
+                'to': target,
+                'arrows': 'to'
+            })
 
-        return jsonify(response)
-    
+        return jsonify({
+            'nodes': nodes,
+            'edges': edges
+        })
+
     except Exception as e:
-        logger.error(f"Erreur lors de l'analyse : {str(e)}")
+        logger.error(f"Erreur lors de l'analyse: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
 if __name__ == '__main__':

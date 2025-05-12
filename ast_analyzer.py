@@ -129,14 +129,14 @@ class LuigiWorkflowAnalyzer:
 
             elif isinstance(node, astroid.Dict):
                 # Cas d'un dictionnaire de tâches: return {'key': TaskA()}
-                for value in node.values:
+                for key, value in node.items:
                     if isinstance(value, astroid.Call) and isinstance(value.func, astroid.Name):
                         self.tasks[task_name].add(value.func.name)
                         self.requires_relations.append((task_name, value.func.name))
 
             elif isinstance(node, astroid.BinOp):
                 # Cas d'une addition de listes: return [TaskA()] + [TaskB()]
-                if isinstance(node.op, astroid.Add):
+                if (node.op=='+'):
                     # Analyser les deux côtés de l'addition
                     self._analyze_return_value(node.left, task_name)
                     self._analyze_return_value(node.right, task_name)

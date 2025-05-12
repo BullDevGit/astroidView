@@ -190,14 +190,19 @@
                 // Fonction pour réinitialiser les styles
                 function resetStyles() {
                     nodes.forEach(node => {
+                        // Restaurer la couleur d'origine en fonction du type de tâche
+                        const originalColor = node.id === data.nodes[0].id ? '#4CAF50' : // Tâche principale
+                                           node.id === data.nodes[data.nodes.length - 1].id ? '#FFC107' : // Tâche finale
+                                           '#2196F3'; // Tâche dépendante
+                        
                         nodes.update({
                             id: node.id,
                             color: {
-                                background: node.color.background,
-                                border: node.color.border,
+                                background: originalColor,
+                                border: originalColor,
                                 highlight: {
-                                    background: node.color.background,
-                                    border: node.color.border
+                                    background: originalColor,
+                                    border: originalColor
                                 }
                             },
                             font: {

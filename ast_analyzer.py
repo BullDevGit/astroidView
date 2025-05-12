@@ -18,7 +18,7 @@ class LuigiWorkflowAnalyzer:
                 return True
         return False
 
-    def analyze_file(self, file_path: str, project_path: str = None) -> None:
+    def analyze_file(self, file_path: str) -> None:
         """Analyse un fichier Python contenant des tâches Luigi."""
         if file_path in self.analyzed_files:
             return
@@ -28,61 +28,27 @@ class LuigiWorkflowAnalyzer:
                 content = f.read()
             
             module = astroid.parse(content)
-            self._process_module(module, project_path)
+            self._process_module(module)
             self.analyzed_files.add(file_path)
         except Exception as e:
             self.logger.warning(f"Erreur lors de l'analyse du fichier {file_path}: {str(e)}")
 
     def analyze_project(self, project_path: str, main_task_path: str) -> None:
         """Analyse un projet Luigi complet à partir de la tâche principale."""
-        module_path, task_name = main_task_path.rsplit('.', 1)
-        file_path = os.path.join(project_path, module_path.replace('.', os.sep) + '.py')
-        
-        if not os.path.exists(file_path):
-            self.logger.warning(f"Fichier non trouvé: {file_path}")
-            return
+        # Parcourir tous les fichiers Python du projet
+        for root, _, files in os.walk(project_path):
+            for file in files:
+                if file.endswith('.py'):
+                    file_path = os.path.join(root, file)
+                    self.analyze_file(file_path)
 
-        # Analyser récursivement tous les fichiers Python du projet
-        self._analyze_project_recursive(project_path, file_path)
-
-    def _analyze_project_recursive(self, project_path: str, current_file: str) -> None:
-        """Analyse récursivement tous les fichiers Python du projet."""
-        # Analyser le fichier courant
-        self.analyze_file(current_file, project_path)
-
-        # Trouver toutes les tâches référencées dans ce fichier
-        referenced_tasks = set()
-        for task_name in self.tasks.keys():
-            referenced_tasks.update(self.tasks[task_name])
-
-        # Pour chaque tâche référencée, chercher son fichier source
-        for task_name in referenced_tasks:
-            # Chercher le fichier dans le projet
-            for root, _, files in os.walk(project_path):
-                for file in files:
-                    if file.endswith('.py'):
-                        file_path = os.path.join(root, file)
-                        if file_path not in self.analyzed_files:
-                            try:
-                                with open(file_path, 'r', encoding='utf-8') as f:
-                                    content = f.read()
-                                module = astroid.parse(content)
-                                
-                                # Vérifier si la tâche est définie dans ce fichier
-                                for node in module.body:
-                                    if isinstance(node, astroid.ClassDef) and node.name == task_name:
-                                        self._analyze_project_recursive(project_path, file_path)
-                                        break
-                            except Exception as e:
-                                self.logger.warning(f"Erreur lors de la lecture du fichier {file_path}: {str(e)}")
-
-    def _process_module(self, module: astroid.Module, project_path: str = None) -> None:
+    def _process_module(self, module: astroid.Module) -> None:
         """Traite un module AST pour trouver les tâches Luigi."""
         for node in module.body:
             if isinstance(node, astroid.ClassDef):
-                self._process_class(node, project_path)
+                self._process_class(node)
 
-    def _process_class(self, class_node: astroid.ClassDef, project_path: str = None) -> None:
+    def _process_class(self, class_node: astroid.ClassDef) -> None:
         """Traite une classe pour identifier les tâches Luigi."""
         try:
             # Vérifie si la classe est une tâche Luigi

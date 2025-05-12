@@ -1,16 +1,12 @@
 import astroid
-import importlib.util
 import os
 from typing import Dict, List, Set, Tuple
-import sys
 import logging
 
 class LuigiWorkflowAnalyzer:
     def __init__(self):
         self.tasks: Dict[str, Set[str]] = {}
         self.requires_relations: List[Tuple[str, str]] = []
-        self.analyzed_modules: Set[str] = set()
-        self.missing_modules: Set[str] = set()
         self.logger = logging.getLogger(__name__)
 
     def analyze_file(self, file_path: str) -> None:
@@ -26,79 +22,14 @@ class LuigiWorkflowAnalyzer:
 
     def analyze_project(self, project_path: str, main_task_path: str) -> None:
         """Analyse un projet Luigi complet à partir de la tâche principale."""
-        # Ajouter le chemin du projet au PYTHONPATH
-        if project_path not in sys.path:
-            sys.path.insert(0, project_path)
-
-        # Importer la tâche principale
         module_path, task_name = main_task_path.rsplit('.', 1)
-        try:
-            module = importlib.import_module(module_path)
-            main_task_class = getattr(module, task_name)
-            
-            # Analyser récursivement toutes les dépendances
-            self._analyze_task_recursive(main_task_class)
-            
-        except (ImportError, AttributeError) as e:
-            self.missing_modules.add(module_path)
-            self.logger.warning(f"Module non trouvé: {module_path} - {str(e)}")
+        file_path = os.path.join(project_path, module_path.replace('.', os.sep) + '.py')
+        
+        if not os.path.exists(file_path):
+            self.logger.warning(f"Fichier non trouvé: {file_path}")
+            return
 
-    def _analyze_task_recursive(self, task_class) -> None:
-        """Analyse récursivement une tâche et ses dépendances."""
-        try:
-            task_name = task_class.__name__
-            
-            # Éviter les cycles
-            if task_name in self.analyzed_modules:
-                return
-            
-            self.analyzed_modules.add(task_name)
-            self.tasks[task_name] = set()
-
-            # Obtenir le module source de la tâche
-            module_path = task_class.__module__
-            if module_path not in self.analyzed_modules:
-                self.analyzed_modules.add(module_path)
-                
-                # Analyser le fichier source
-                try:
-                    spec = importlib.util.find_spec(module_path)
-                    if spec and spec.origin:
-                        self.analyze_file(spec.origin)
-                except Exception as e:
-                    self.missing_modules.add(module_path)
-                    self.logger.warning(f"Module non trouvé: {module_path} - {str(e)}")
-
-            # Analyser les dépendances via requires()
-            if hasattr(task_class, 'requires'):
-                try:
-                    requires = task_class.requires()
-                    if requires is not None:
-                        if isinstance(requires, (list, tuple)):
-                            # Cas d'une liste ou d'un tuple de tâches
-                            for req in requires:
-                                self._add_dependency(task_name, req)
-                        elif isinstance(requires, dict):
-                            # Cas d'un dictionnaire de tâches
-                            for req in requires.values():
-                                self._add_dependency(task_name, req)
-                        else:
-                            # Cas d'une tâche unique
-                            self._add_dependency(task_name, requires)
-                except Exception as e:
-                    self.logger.warning(f"Erreur lors de l'analyse des dépendances de {task_name}: {str(e)}")
-        except Exception as e:
-            self.logger.warning(f"Erreur lors de l'analyse de la tâche: {str(e)}")
-
-    def _add_dependency(self, task_name: str, required_task) -> None:
-        """Ajoute une dépendance et analyse récursivement la tâche requise."""
-        try:
-            req_name = required_task.__name__
-            self.tasks[task_name].add(req_name)
-            self.requires_relations.append((task_name, req_name))
-            self._analyze_task_recursive(required_task)
-        except Exception as e:
-            self.logger.warning(f"Erreur lors de l'ajout de la dépendance {required_task} à {task_name}: {str(e)}")
+        self.analyze_file(file_path)
 
     def _process_module(self, module: astroid.Module) -> None:
         """Traite un module AST pour trouver les tâches Luigi."""
@@ -127,23 +58,50 @@ class LuigiWorkflowAnalyzer:
     def _process_requires(self, method_node: astroid.FunctionDef, task_name: str) -> None:
         """Traite la méthode requires() pour extraire les dépendances."""
         try:
+            # Parcourir l'AST de la méthode requires
             for node in astroid.walk(method_node):
-                if isinstance(node, astroid.Call):
-                    if isinstance(node.func, astroid.Name):
-                        # Cas d'une tâche unique
-                        required_task = node.func.name
-                        self.tasks[task_name].add(required_task)
-                        self.requires_relations.append((task_name, required_task))
-                    elif isinstance(node.func, astroid.Attribute):
-                        if node.func.attrname in ('list', 'tuple', 'dict'):
-                            # Cas d'une liste, tuple ou dict de tâches
-                            for arg in node.args:
-                                if isinstance(arg, astroid.Call) and isinstance(arg.func, astroid.Name):
-                                    required_task = arg.func.name
-                                    self.tasks[task_name].add(required_task)
-                                    self.requires_relations.append((task_name, required_task))
+                if isinstance(node, astroid.Return):
+                    # Analyser la valeur de retour
+                    self._analyze_return_value(node.value, task_name)
         except Exception as e:
             self.logger.warning(f"Erreur lors du traitement des dépendances de {task_name}: {str(e)}")
+
+    def _analyze_return_value(self, node: astroid.NodeNG, task_name: str) -> None:
+        """Analyse la valeur de retour de requires() pour trouver les dépendances."""
+        try:
+            if isinstance(node, astroid.Call):
+                # Cas d'une tâche unique: return TaskA()
+                if isinstance(node.func, astroid.Name):
+                    self.tasks[task_name].add(node.func.name)
+                    self.requires_relations.append((task_name, node.func.name))
+
+            elif isinstance(node, astroid.List):
+                # Cas d'une liste de tâches: return [TaskA(), TaskB()]
+                for elt in node.elts:
+                    if isinstance(elt, astroid.Call) and isinstance(elt.func, astroid.Name):
+                        self.tasks[task_name].add(elt.func.name)
+                        self.requires_relations.append((task_name, elt.func.name))
+
+            elif isinstance(node, astroid.Dict):
+                # Cas d'un dictionnaire de tâches: return {'key': TaskA()}
+                for value in node.values:
+                    if isinstance(value, astroid.Call) and isinstance(value.func, astroid.Name):
+                        self.tasks[task_name].add(value.func.name)
+                        self.requires_relations.append((task_name, value.func.name))
+
+            elif isinstance(node, astroid.BinOp) and isinstance(node.op, astroid.Add):
+                # Cas d'une concaténation de listes: return [TaskA()] + [TaskB()]
+                self._analyze_return_value(node.left, task_name)
+                self._analyze_return_value(node.right, task_name)
+
+            elif isinstance(node, astroid.Call) and isinstance(node.func, astroid.Name):
+                # Cas d'un appel à list(), tuple(), dict()
+                if node.func.name in ('list', 'tuple', 'dict'):
+                    for arg in node.args:
+                        self._analyze_return_value(arg, task_name)
+
+        except Exception as e:
+            self.logger.warning(f"Erreur lors de l'analyse de la valeur de retour: {str(e)}")
 
     def get_dependencies(self) -> Dict[str, Set[str]]:
         """Retourne les dépendances entre les tâches."""
@@ -151,8 +109,4 @@ class LuigiWorkflowAnalyzer:
 
     def get_relations(self) -> List[Tuple[str, str]]:
         """Retourne les relations de dépendance sous forme de tuples."""
-        return self.requires_relations
-
-    def get_missing_modules(self) -> Set[str]:
-        """Retourne la liste des modules manquants."""
-        return self.missing_modules 
+        return self.requires_relations 

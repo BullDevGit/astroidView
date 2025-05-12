@@ -1,6 +1,7 @@
 import networkx as nx
 from pyvis.network import Network
 from typing import List, Tuple
+import os
 
 class GraphGenerator:
     def __init__(self):
@@ -11,8 +12,11 @@ class GraphGenerator:
         for source, target in relations:
             self.G.add_edge(source, target)
 
-    def generate_html(self, output_file: str = "templates/graph.html") -> None:
+    def generate_html(self, output_file: str = "static/graph.html") -> None:
         """Génère une visualisation HTML interactive du graphe."""
+        # Créer le dossier static s'il n'existe pas
+        os.makedirs(os.path.dirname(output_file), exist_ok=True)
+        
         net = Network(height="750px", width="100%", bgcolor="#ffffff", font_color="black")
         
         # Ajoute les nœuds et les arêtes

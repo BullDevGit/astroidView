@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, jsonify
+from flask import Flask, render_template, request, jsonify, send_from_directory
 from ast_analyzer import LuigiWorkflowAnalyzer
 from graph_generator import GraphGenerator
 import os
@@ -8,7 +8,7 @@ import logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-app = Flask(__name__)
+app = Flask(__name__, static_folder='static')
 
 def convert_sets_to_lists(data):
     """Convertit récursivement tous les ensembles en listes."""
@@ -59,8 +59,8 @@ def analyze():
         # Génération du graphe
         graph_gen.add_relations(analyzer.get_relations())
         
-        # Création du dossier templates s'il n'existe pas
-        os.makedirs('templates', exist_ok=True)
+        # Création des dossiers nécessaires
+        os.makedirs('static', exist_ok=True)
         
         # Génération de la visualisation
         graph_gen.generate_html()

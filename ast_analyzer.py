@@ -10,7 +10,7 @@ class LuigiWorkflowAnalyzer:
         self.analyzed_files: Set[str] = set()
         self.logger = logging.getLogger(__name__)
 
-    def _is_luigi_task(self, class_node: astroid.ClassDef, analyzed_classes: Set[str] = None) -> bool:
+    def _is_luigi_task(self, class_node: astroid.ClassDef, analyzed_classes: Set[str] = None, project_path: str = None) -> bool:
         """Vérifie récursivement si une classe hérite de luigi.Task."""
         if analyzed_classes is None:
             analyzed_classes = set()
@@ -40,15 +40,27 @@ class LuigiWorkflowAnalyzer:
         # Vérifier récursivement les classes parentes
         for base in class_node.bases:
             if isinstance(base, astroid.Name):
-                # Chercher la définition de la classe parente dans le même module
-                for node in class_node.parent.body:
-                    if isinstance(node, astroid.ClassDef) and node.name == base.name:
-                        if self._is_luigi_task(node, analyzed_classes):
-                            return True
+                # Chercher la définition de la classe parente dans tous les fichiers du projet
+                if project_path:
+                    for root, _, files in os.walk(project_path):
+                        for file in files:
+                            if file.endswith('.py'):
+                                try:
+                                    with open(os.path.join(root, file), 'r', encoding='utf-8') as f:
+                                        content = f.read()
+                                    module = astroid.parse(content)
+                                    
+                                    # Chercher la classe parente dans ce module
+                                    for node in module.body:
+                                        if isinstance(node, astroid.ClassDef) and node.name == base.name:
+                                            if self._is_luigi_task(node, analyzed_classes, project_path):
+                                                return True
+                                except Exception as e:
+                                    self.logger.warning(f"Erreur lors de la lecture du fichier {file}: {str(e)}")
 
         return False
 
-    def analyze_file(self, file_path: str) -> None:
+    def analyze_file(self, file_path: str, project_path: str = None) -> None:
         """Analyse un fichier Python contenant des tâches Luigi."""
         if file_path in self.analyzed_files:
             return
@@ -58,7 +70,7 @@ class LuigiWorkflowAnalyzer:
                 content = f.read()
             
             module = astroid.parse(content)
-            self._process_module(module)
+            self._process_module(module, project_path)
             self.analyzed_files.add(file_path)
         except Exception as e:
             self.logger.warning(f"Erreur lors de l'analyse du fichier {file_path}: {str(e)}")
@@ -78,7 +90,7 @@ class LuigiWorkflowAnalyzer:
     def _analyze_project_recursive(self, project_path: str, current_file: str) -> None:
         """Analyse récursivement tous les fichiers Python du projet."""
         # Analyser le fichier courant
-        self.analyze_file(current_file)
+        self.analyze_file(current_file, project_path)
 
         # Trouver toutes les tâches référencées dans ce fichier
         referenced_tasks = set()
@@ -106,17 +118,17 @@ class LuigiWorkflowAnalyzer:
                             except Exception as e:
                                 self.logger.warning(f"Erreur lors de la lecture du fichier {file_path}: {str(e)}")
 
-    def _process_module(self, module: astroid.Module) -> None:
+    def _process_module(self, module: astroid.Module, project_path: str = None) -> None:
         """Traite un module AST pour trouver les tâches Luigi."""
         for node in module.body:
             if isinstance(node, astroid.ClassDef):
-                self._process_class(node)
+                self._process_class(node, project_path)
 
-    def _process_class(self, class_node: astroid.ClassDef) -> None:
+    def _process_class(self, class_node: astroid.ClassDef, project_path: str = None) -> None:
         """Traite une classe pour identifier les tâches Luigi."""
         try:
             # Vérifie si la classe hérite de luigi.Task de manière récursive
-            if not self._is_luigi_task(class_node):
+            if not self._is_luigi_task(class_node, project_path=project_path):
                 return
 
             task_name = class_node.name

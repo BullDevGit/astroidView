@@ -67,9 +67,10 @@
                     <div class="card-body">
                         <h5>Légende</h5>
                         <ul>
-                            <li><span style="color: #4CAF50;">●</span> Tâche principale</li>
-                            <li><span style="color: #2196F3;">●</span> Tâche dépendante</li>
-                            <li><span style="color: #FFC107;">●</span> Tâche finale</li>
+                            <li><span style="color: #4CAF50;">●</span> Tâche sélectionnée</li>
+                            <li><span style="color: #FFC107;">●</span> Tâche source (sans dépendances entrantes)</li>
+                            <li><span style="color: #2196F3;">●</span> Tâche intermédiaire</li>
+                            <li><span style="color: #FF69B4;">●</span> Tâche sans requires</li>
                         </ul>
                     </div>
                 </div>
@@ -180,16 +181,29 @@
 
                 // Fonction pour réinitialiser les styles
                 function resetStyles() {
-                    // Créer un ensemble des tâches qui sont des dépendances
-                    const dependentTasks = new Set();
+                    // Créer des ensembles pour les différents types de tâches
+                    const incomingEdges = new Set();
+                    const outgoingEdges = new Set();
+                    const tasksWithRequires = new Set();
+
                     edges.forEach(edge => {
-                        dependentTasks.add(edge.to);
+                        incomingEdges.add(edge.to);
+                        outgoingEdges.add(edge.from);
                     });
 
+                    // Analyser les nœuds pour déterminer leur type
                     nodes.forEach(node => {
-                        // Restaurer la couleur d'origine en fonction du type de tâche
-                        const originalColor = dependentTasks.has(node.id) ? '#2196F3' : // Tâche dépendante
-                                           '#FFC107'; // Tâche sans dépendances
+                        let originalColor;
+                        if (!incomingEdges.has(node.id)) {
+                            // Tâche source (sans dépendances entrantes)
+                            originalColor = '#FFC107';
+                        } else if (!outgoingEdges.has(node.id)) {
+                            // Tâche sans requires
+                            originalColor = '#FF69B4';
+                        } else {
+                            // Tâche intermédiaire
+                            originalColor = '#2196F3';
+                        }
                         
                         nodes.update({
                             id: node.id,

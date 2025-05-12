@@ -11,10 +11,10 @@ class LuigiWorkflowAnalyzer:
         self.logger = logging.getLogger(__name__)
 
     def _is_luigi_task(self, class_node: astroid.ClassDef) -> bool:
-        """Vérifie si une classe est une tâche Luigi en cherchant la méthode requires."""
-        # Cherche la méthode requires dans la classe
+        """Vérifie si une classe est une tâche Luigi en cherchant la méthode requires ou output."""
+        # Cherche la méthode requires ou output dans la classe
         for node in class_node.body:
-            if isinstance(node, astroid.FunctionDef) and node.name == 'requires':
+            if isinstance(node, astroid.FunctionDef) and node.name in ('requires', 'output'):
                 return True
         return False
 

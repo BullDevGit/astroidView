@@ -117,6 +117,16 @@ class LuigiWorkflowAnalyzer:
                         self.tasks[task_name].add(elt.func.name)
                         self.requires_relations.append((task_name, elt.func.name))
 
+            elif isinstance(node, astroid.ListComp):
+                # Cas d'une compréhension de liste: return [TaskA() for x in items]
+                if isinstance(node.elt, astroid.Call) and isinstance(node.elt.func, astroid.Name):
+                    self.tasks[task_name].add(node.elt.func.name)
+                    self.requires_relations.append((task_name, node.elt.func.name))
+                # Cas d'une compréhension de liste avec condition: return [TaskA() for x in items if condition]
+                elif isinstance(node.elt, astroid.IfExp):
+                    self._analyze_return_value(node.elt.body, task_name)
+                    self._analyze_return_value(node.elt.orelse, task_name)
+
             elif isinstance(node, astroid.Dict):
                 # Cas d'un dictionnaire de tâches: return {'key': TaskA()}
                 for value in node.values:
@@ -124,10 +134,14 @@ class LuigiWorkflowAnalyzer:
                         self.tasks[task_name].add(value.func.name)
                         self.requires_relations.append((task_name, value.func.name))
 
-            elif isinstance(node, astroid.BinOp) and isinstance(node.op, astroid.Add):
-                # Cas d'une concaténation de listes: return [TaskA()] + [TaskB()]
-                self._analyze_return_value(node.left, task_name)
-                self._analyze_return_value(node.right, task_name)
+            elif isinstance(node, astroid.BinOp):
+                # Cas d'une addition de listes: return [TaskA()] + [TaskB()]
+                if isinstance(node.op, astroid.Add):
+                    # Analyser les deux côtés de l'addition
+                    self._analyze_return_value(node.left, task_name)
+                    self._analyze_return_value(node.right, task_name)
+                else:
+                    self.logger.warning(f"Opération binaire non supportée: {type(node.op)}")
 
             elif isinstance(node, astroid.Call) and isinstance(node.func, astroid.Name):
                 # Cas d'un appel à list(), tuple(), dict()

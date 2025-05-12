@@ -187,6 +187,43 @@
                 
                 const network = new vis.Network(container, { nodes, edges }, options);
 
+                // Fonction pour réinitialiser les styles
+                function resetStyles() {
+                    nodes.forEach(node => {
+                        nodes.update({
+                            id: node.id,
+                            color: {
+                                background: node.color.background,
+                                border: node.color.border,
+                                highlight: {
+                                    background: node.color.background,
+                                    border: node.color.border
+                                }
+                            },
+                            font: {
+                                color: '#000000',
+                                size: 14,
+                                face: 'arial',
+                                bold: false
+                            },
+                            shadow: false
+                        });
+                    });
+
+                    edges.forEach(edge => {
+                        edges.update({
+                            id: edge.id,
+                            color: {
+                                color: '#2196F3',
+                                highlight: '#2196F3',
+                                opacity: 1.0
+                            },
+                            width: 2,
+                            shadow: false
+                        });
+                    });
+                }
+
                 // Gestion de la sélection des nœuds
                 network.on('select', function(params) {
                     if (params.nodes.length > 0) {
@@ -246,40 +283,13 @@
                 });
 
                 // Réinitialiser les styles lors de la désélection
-                network.on('deselect', function() {
-                    nodes.forEach(node => {
-                        nodes.update({
-                            id: node.id,
-                            color: {
-                                background: node.color.background,
-                                border: node.color.border,
-                                highlight: {
-                                    background: node.color.background,
-                                    border: node.color.border
-                                }
-                            },
-                            font: {
-                                color: '#000000',
-                                size: 14,
-                                face: 'arial',
-                                bold: false
-                            },
-                            shadow: false
-                        });
-                    });
+                network.on('deselect', resetStyles);
 
-                    edges.forEach(edge => {
-                        edges.update({
-                            id: edge.id,
-                            color: {
-                                color: '#2196F3',
-                                highlight: '#2196F3',
-                                opacity: 1.0
-                            },
-                            width: 2,
-                            shadow: false
-                        });
-                    });
+                // Réinitialiser les styles lors d'un clic dans le vide
+                network.on('click', function(params) {
+                    if (params.nodes.length === 0) {
+                        resetStyles();
+                    }
                 });
                 
             } catch (error) {

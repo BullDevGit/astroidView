@@ -10,6 +10,16 @@ logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
 
+def convert_sets_to_lists(data):
+    """Convertit récursivement tous les ensembles en listes."""
+    if isinstance(data, set):
+        return list(data)
+    elif isinstance(data, dict):
+        return {k: convert_sets_to_lists(v) for k, v in data.items()}
+    elif isinstance(data, list):
+        return [convert_sets_to_lists(item) for item in data]
+    return data
+
 @app.route('/')
 def index():
     return render_template('index.html')
@@ -56,10 +66,11 @@ def analyze():
         graph_gen.generate_html()
         
         # Préparation de la réponse
+        dependencies = convert_sets_to_lists(analyzer.get_dependencies())
         response = {
             'success': True,
             'message': 'Analyse terminée avec succès',
-            'dependencies': analyzer.get_dependencies()
+            'dependencies': dependencies
         }
 
         # Ajout des modules manquants s'il y en a

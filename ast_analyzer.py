@@ -7,6 +7,7 @@ class LuigiWorkflowAnalyzer:
     def __init__(self):
         self.tasks: Dict[str, Set[str]] = {}
         self.requires_relations: List[Tuple[str, str]] = []
+        self.inheritance_relations: List[Tuple[str, str]] = []  # Pour stocker les relations d'héritage
         self.analyzed_files: Set[str] = set()
         self.logger = logging.getLogger(__name__)
 
@@ -63,7 +64,7 @@ class LuigiWorkflowAnalyzer:
                 self._process_class(node)
 
     def _process_class(self, class_node: astroid.ClassDef) -> None:
-        """Traite une classe pour identifier les tâches Luigi."""
+        """Traite une classe pour identifier les tâches Luigi et les relations d'héritage."""
         try:
             # Vérifie si la classe est une tâche Luigi
             if not self._is_luigi_task(class_node):
@@ -77,6 +78,18 @@ class LuigiWorkflowAnalyzer:
             for node in class_node.body:
                 if isinstance(node, astroid.FunctionDef) and node.name == 'requires':
                     self._process_requires(node, task_name)
+
+            # Cherche les relations d'héritage
+            for base in class_node.bases:
+                if isinstance(base, astroid.Name):
+                    try:
+                        parent_class = next(base.infer())
+                        if isinstance(parent_class, astroid.ClassDef):
+                            # Ajouter la relation d'héritage
+                            self.inheritance_relations.append((task_name, parent_class.name))
+                    except (astroid.InferenceError, StopIteration):
+                        continue
+
         except Exception as e:
             self.logger.warning(f"Erreur lors du traitement de la classe {class_node.name}: {str(e)}")
 
@@ -177,4 +190,8 @@ class LuigiWorkflowAnalyzer:
 
     def get_relations(self) -> List[Tuple[str, str]]:
         """Retourne les relations de dépendance sous forme de tuples."""
-        return self.requires_relations 
+        return self.requires_relations
+
+    def get_inheritance_relations(self) -> List[Tuple[str, str]]:
+        """Retourne les relations d'héritage sous forme de tuples."""
+        return self.inheritance_relations 

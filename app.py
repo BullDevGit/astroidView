@@ -27,44 +27,42 @@ def analyze():
         analyzer = LuigiWorkflowAnalyzer()
         analyzer.analyze_project(project_path, main_task)
 
-        # Préparer les données pour vis.js
+        # Créer les nœuds et les arêtes pour le graphe
         nodes = []
         edges = []
-        
-        # Créer les nœuds
-        for task_name in analyzer.tasks.keys():
-            node = {
-                'id': task_name,
-                'label': task_name,
+        node_id = 0
+        node_map = {}
+
+        # Ajouter les nœuds
+        for task in analyzer.get_dependencies().keys():
+            node_map[task] = node_id
+            nodes.append({
+                'id': node_id,
+                'label': task,
                 'color': {
-                    'background': '#2196F3',  # Bleu par défaut
+                    'background': '#2196F3',
                     'border': '#1976D2'
                 }
-            }
-            
-            # Marquer la tâche principale
-            if task_name == main_task.split('.')[-1]:
-                node['color']['background'] = '#4CAF50'  # Vert
-                node['color']['border'] = '#388E3C'
-            
-            # Marquer les tâches finales (sans dépendances)
-            if not any(edge[1] == task_name for edge in analyzer.requires_relations):
-                node['color']['background'] = '#FFC107'  # Jaune
-                node['color']['border'] = '#FFA000'
-            
-            nodes.append(node)
-
-        # Créer les arêtes
-        for source, target in analyzer.requires_relations:
-            edges.append({
-                'from': source,
-                'to': target,
-                'arrows': 'to'
             })
+            node_id += 1
+
+        # Ajouter les arêtes de dépendance
+        for source, target in analyzer.get_relations():
+            if source in node_map and target in node_map:
+                edges.append({
+                    'from': node_map[source],
+                    'to': node_map[target],
+                    'arrows': {
+                        'to': {'enabled': True, 'scaleFactor': 1}
+                    }
+                })
 
         return jsonify({
             'nodes': nodes,
-            'edges': edges
+            'edges': edges,
+            'inheritance_relations': [(node_map[source], node_map[target]) 
+                                    for source, target in analyzer.get_inheritance_relations()
+                                    if source in node_map and target in node_map]
         })
 
     except Exception as e:

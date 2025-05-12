@@ -130,6 +130,26 @@
                 const container = document.getElementById('graph-container');
                 const nodes = new vis.DataSet(data.nodes);
                 const edges = new vis.DataSet(data.edges);
+
+                // Ajouter les relations d'héritage
+                if (data.inheritance_relations) {
+                    data.inheritance_relations.forEach(relation => {
+                        edges.add({
+                            from: relation[0],
+                            to: relation[1],
+                            color: {
+                                color: '#4CAF50',
+                                highlight: '#4CAF50',
+                                opacity: 0.8
+                            },
+                            dashes: true,
+                            width: 2,
+                            arrows: {
+                                to: { enabled: true, scaleFactor: 1 }
+                            }
+                        });
+                    });
+                }
                 
                 const options = {
                     nodes: {

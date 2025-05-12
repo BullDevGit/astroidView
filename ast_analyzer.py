@@ -11,11 +11,25 @@ class LuigiWorkflowAnalyzer:
         self.logger = logging.getLogger(__name__)
 
     def _is_luigi_task(self, class_node: astroid.ClassDef) -> bool:
-        """Vérifie si une classe est une tâche Luigi en cherchant la méthode requires ou output."""
-        # Cherche la méthode requires ou output dans la classe
+        """Vérifie si une classe est une tâche Luigi en cherchant la méthode requires ou output dans la classe et ses parents."""
+        # Vérifier les méthodes dans la classe actuelle
         for node in class_node.body:
             if isinstance(node, astroid.FunctionDef) and node.name in ('requires', 'output'):
                 return True
+
+        # Vérifier les méthodes dans les classes parentes
+        for base in class_node.bases:
+            if isinstance(base, astroid.Name):
+                # Chercher la définition de la classe parente
+                try:
+                    parent_class = next(base.infer())
+                    if isinstance(parent_class, astroid.ClassDef):
+                        # Vérifier récursivement les méthodes dans la classe parente
+                        if self._is_luigi_task(parent_class):
+                            return True
+                except (astroid.InferenceError, StopIteration):
+                    continue
+
         return False
 
     def analyze_file(self, file_path: str) -> None:

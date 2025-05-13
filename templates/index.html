@@ -38,9 +38,7 @@
     </style>
 </head>
 <body>
-    <div class="container mt-4">
-        <h3 class="mb-4">Analyseur de Workflow Luigi</h3>
-        
+    <div class="container mt-4">        
         <div class="row">
             <div class="col-md-6">
                 <div class="card">
@@ -51,7 +49,7 @@
                                 <input type="text" class="form-control" id="project-path" required
                                        placeholder="/chemin/vers/votre/projet">
                             </div>
-                            <div class="mb-3">
+                            <div class="mb-3" hidden>
                                 <label for="main-task" class="form-label">Tâche principale :</label>
                                 <input type="text" class="form-control" id="main-task" required
                                        placeholder="mon_projet.tasks.MaTachePrincipale">
@@ -79,6 +77,17 @@
 
         <div class="row mt-4">
             <div class="col-12">
+                <div class="card mb-3">
+                    <div class="card-body">
+                        <h5 class="card-title">Options</h5>
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="hierarchical-layout">
+                            <label class="form-check-label" for="hierarchical-layout">
+                                Layout hiérarchique
+                            </label>
+                        </div>
+                    </div>
+                </div>
                 <div id="graph-container"></div>
             </div>
         </div>
@@ -327,12 +336,14 @@
                     }
                 });
                 
+                document.getElementById('hierarchical-layout').addEventListener('change', function(e) {
+                    options.layout.hierarchical = e.target.checked;
+                    if (e.target.checked) {
+                        options.layout.direction = 'UD';  // Up-Down direction
+                        options.layout.sortMethod = 'directed';
+                    }
+                    network.setOptions(options);
+                });
+                
             } catch (error) {
-                errorMessage.textContent = `Erreur: ${error.message}`;
-            } finally {
-                loading.style.display = 'none';
-            }
-        });
-    </script>
-</body>
-</html> 
+                errorMessage.textContent = `Erreur: ${error.message}`

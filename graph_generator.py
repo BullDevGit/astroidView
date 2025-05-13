@@ -1,5 +1,4 @@
 import networkx as nx
-from pyvis.network import Network
 from typing import List, Tuple
 import os
 

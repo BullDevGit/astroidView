@@ -52,7 +52,7 @@
                             <div class="mb-3" hidden>
                                 <label for="main-task" class="form-label">Tâche principale :</label>
                                 <input type="text" class="form-control" id="main-task" required
-                                       placeholder="mon_projet.tasks.MaTachePrincipale">
+                                       placeholder="mon_projet.tasks.MaTachePrincipale" value=" ">
                             </div>
                             <button type="submit" class="btn btn-primary">Analyser</button>
                         </form>
@@ -347,3 +347,11 @@
                 
             } catch (error) {
                 errorMessage.textContent = `Erreur: ${error.message}`
+            } finally {
+                loading.style.display = 'none';
+            }
+        });
+    </script>
+</body>
+</html>
+

@@ -47,9 +47,11 @@ def analyze():
             node_id += 1
 
         # Ajouter les arêtes de dépendance
-        for source, target in analyzer.get_relations():
+        edge_counter = 0
+        for source, target, call_id in analyzer.get_relations():
             if source in node_map and target in node_map:
                 edges.append({
+                    'id': call_id,
                     'from': node_map[source],
                     'to': node_map[target],
                     'arrows': {
@@ -62,7 +64,13 @@ def analyze():
             'edges': edges,
             'inheritance_relations': [(node_map[source], node_map[target]) 
                                     for source, target in analyzer.get_inheritance_relations()
-                                    if source in node_map and target in node_map]
+                                    if source in node_map and target in node_map],
+            'task_parameters': analyzer.get_task_parameters(),
+            'requires_parameters': {
+                f"{node_map[source]}-{node_map[target]}-{call_id}": params
+                for (source, target, call_id), params in analyzer.get_requires_parameters().items()
+                if source in node_map and target in node_map
+            }
         })
 
     except Exception as e:

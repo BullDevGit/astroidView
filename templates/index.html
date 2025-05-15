@@ -75,24 +75,31 @@
             </div>
         </div>
 
-        <div class="row mt-4">
-            <div class="col-12">
-                <div class="card mb-3">
-                    <div class="card-body">
-                        <h5 class="card-title">Options</h5>
-                        <div class="form-check">
-                            <input class="form-check-input" type="checkbox" id="hierarchical-layout">
-                            <label class="form-check-label" for="hierarchical-layout">
-                                Layout hiérarchique
-                            </label>
-                        </div>
+
+    </div>
+    <div class="row mt-4">
+        <div class="col-md-3">
+            <div class="card mb-3" id="task-info" style="display: none;">
+                <div class="card-body">
+                    <h5 class="card-title">Paramètres de la tâche</h5>
+                    <div id="task-parameters">
+                        <!-- Les paramètres de la tâche seront affichés ici -->
                     </div>
                 </div>
-                <div id="graph-container"></div>
+            </div>
+            <div class="card" id="requires-info" style="display: none;">
+                <div class="card-body">
+                    <h5 class="card-title">Paramètres passés</h5>
+                    <div id="requires-parameters">
+                        <!-- Les paramètres passés dans requires seront affichés ici -->
+                    </div>
+                </div>
             </div>
         </div>
+        <div class="col-md-9">
+            <div id="graph-container"></div>
+        </div>
     </div>
-
     <div id="loading" class="loading" style="display: none;">
         <div class="spinner-border text-primary" role="status">
             <span class="visually-hidden">Chargement...</span>
@@ -102,254 +109,395 @@
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/vis/4.21.0/vis.min.js"></script>
     <script>
-        document.getElementById('analysis-form').addEventListener('submit', async function(e) {
-            e.preventDefault();
-            
-            const projectPath = document.getElementById('project-path').value;
-            const mainTask = document.getElementById('main-task').value;
-            const errorMessage = document.getElementById('error-message');
-            const loading = document.getElementById('loading');
-            
-            errorMessage.textContent = '';
-            loading.style.display = 'flex';
-            
-            try {
-                const response = await fetch('/analyze', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({
-                        project_path: projectPath,
-                        main_task: mainTask
-                    })
-                });
+        // Attendre que le DOM soit chargé
+        document.addEventListener('DOMContentLoaded', function() {
+            document.getElementById('analysis-form').addEventListener('submit', async function(e) {
+                e.preventDefault();
                 
-                if (!response.ok) {
-                    throw new Error(`Erreur HTTP: ${response.status}`);
-                }
+                const projectPath = document.getElementById('project-path').value;
+                const mainTask = document.getElementById('main-task').value;
+                const errorMessage = document.getElementById('error-message');
+                const loading = document.getElementById('loading');
                 
-                const data = await response.json();
+                errorMessage.textContent = '';
+                loading.style.display = 'flex';
                 
-                if (data.error) {
-                    throw new Error(data.error);
-                }
-                
-                // Créer le graphe
-                const container = document.getElementById('graph-container');
-                const nodes = new vis.DataSet(data.nodes);
-                const edges = new vis.DataSet(data.edges);
+                try {
+                    const response = await fetch('/analyze', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            project_path: projectPath,
+                            main_task: mainTask
+                        })
+                    });
+                    
+                    if (!response.ok) {
+                        throw new Error(`Erreur HTTP: ${response.status}`);
+                    }
+                    
+                    const data = await response.json();
+                    
+                    if (data.error) {
+                        throw new Error(data.error);
+                    }
+                    
+                    // Créer le graphe
+                    const container = document.getElementById('graph-container');
+                    const nodes = new vis.DataSet(data.nodes);
+                    const edges = new vis.DataSet();
+                    const edgeCount = new Map();
 
-                // Ajouter les relations d'héritage
-                if (data.inheritance_relations) {
-                    data.inheritance_relations.forEach(relation => {
-                        edges.add({
-                            from: relation[0],
-                            to: relation[1],
-                            color: {
-                                color: '#4CAF50',
-                                highlight: '#4CAF50',
-                                opacity: 0.8
-                            },
-                            dashes: true,
-                            width: 2,
+                    // Ajouter les relations d'héritage
+                    if (data.inheritance_relations) {
+                        data.inheritance_relations.forEach(relation => {
+                            edges.add({
+                                from: relation[0],
+                                to: relation[1],
+                                color: {
+                                    color: '#4CAF50',
+                                    highlight: '#4CAF50',
+                                    opacity: 0.8
+                                },
+                                dashes: true,
+                                width: 2,
+                                arrows: {
+                                    to: { enabled: true, scaleFactor: 1 }
+                                }
+                            });
+                        });
+                    }
+                    
+                    // Ajouter les arêtes de dépendance
+                    data.edges.forEach(edge => {
+                        const edgeKey = `${edge.from}-${edge.to}`;
+                        const count = edgeCount.get(edgeKey) || 0;
+                        edgeCount.set(edgeKey, count + 1);
+                        
+                        // Créer une nouvelle arête avec les propriétés de courbure
+                        const newEdge = {
+                            id: edge.id,
+                            from: edge.from,
+                            to: edge.to,
                             arrows: {
                                 to: { enabled: true, scaleFactor: 1 }
+                            },
+                            smooth: {
+                                type: 'curvedCW',
+                                roundness: 0.2 + (count * 0.1),
+                                forceDirection: 'horizontal'
                             }
-                        });
-                    });
-                }
-                
-                const options = {
-                    nodes: {
-                        shape: 'box',
-                        margin: 10,
-                        font: {
-                            size: 14
-                        },
-                        borderWidth: 2,
-                        shadow: true
-                    },
-                    edges: {
-                        arrows: {
-                            to: { enabled: true, scaleFactor: 1 }
-                        },
-                        smooth: {
-                            type: 'cubicBezier',
-                            forceDirection: 'horizontal'
-                        },
-                        width: 2,
-                        shadow: true
-                    },
-                    layout: {
-                        hierarchical: false
-                    },
-                    physics: {
-                        enabled: true,
-                        solver: 'forceAtlas2Based',
-                        forceAtlas2Based: {
-                            gravitationalConstant: -50,
-                            centralGravity: 0.005,
-                            springLength: 200,
-                            springConstant: 0.18
-                        },
-                        stabilization: {
-                            enabled: true,
-                            iterations: 1000
-                        }
-                    },
-                    interaction: {
-                        dragNodes: true,
-                        dragView: true,
-                        zoomView: true,
-                        hover: true
-                    }
-                };
-                
-                const network = new vis.Network(container, { nodes, edges }, options);
-
-                // Fonction pour réinitialiser les styles
-                function resetStyles() {
-                    // Créer des ensembles pour les différents types de tâches
-                    const incomingEdges = new Set();
-                    const outgoingEdges = new Set();
-                    const tasksWithRequires = new Set();
-
-                    edges.forEach(edge => {
-                        incomingEdges.add(edge.to);
-                        outgoingEdges.add(edge.from);
-                    });
-
-                    // Analyser les nœuds pour déterminer leur type
-                    nodes.forEach(node => {
-                        let originalColor;
-                        if (!incomingEdges.has(node.id)) {
-                            // Tâche source (sans dépendances entrantes)
-                            originalColor = '#FFC107';
-                        } else if (!outgoingEdges.has(node.id)) {
-                            // Tâche sans requires
-                            originalColor = '#FF69B4';
-                        } else {
-                            // Tâche intermédiaire
-                            originalColor = '#2196F3';
-                        }
+                        };
                         
-                        nodes.update({
-                            id: node.id,
-                            color: {
-                                background: originalColor,
-                                border: originalColor,
-                                highlight: {
-                                    background: originalColor,
-                                    border: originalColor
-                                }
-                            },
-                            font: {
-                                color: '#000000',
-                                size: 14,
-                                face: 'arial',
-                                bold: false
-                            },
-                            shadow: false
-                        });
+                        // Ajouter l'arête au DataSet
+                        edges.add(newEdge);
                     });
-
-                    edges.forEach(edge => {
-                        edges.update({
-                            id: edge.id,
-                            color: {
-                                color: '#2196F3',
-                                highlight: '#2196F3',
-                                opacity: 1.0
+                    
+                    // Mettre à jour les options du réseau
+                    const options = {
+                        nodes: {
+                            shape: 'box',
+                            margin: 10,
+                            font: {
+                                size: 14
+                            },
+                            borderWidth: 2,
+                            shadow: true
+                        },
+                        edges: {
+                            arrows: {
+                                to: { enabled: true, scaleFactor: 1 }
+                            },
+                            smooth: {
+                                type: 'curvedCW',
+                                roundness: 0.2,
+                                forceDirection: 'horizontal'
                             },
                             width: 2,
-                            shadow: false
-                        });
-                    });
-                }
-
-                // Gestion de la sélection des nœuds
-                network.on('select', function(params) {
-                    if (params.nodes.length > 0) {
-                        const selectedNode = params.nodes[0];
-                        const connectedNodes = new Set();
-                        const connectedEdges = new Set();
-
-                        // Trouver tous les nœuds et arêtes connectés
-                        edges.forEach(edge => {
-                            if (edge.from === selectedNode || edge.to === selectedNode) {
-                                connectedNodes.add(edge.from);
-                                connectedNodes.add(edge.to);
-                                connectedEdges.add(edge.id);
+                            shadow: true
+                        },
+                        layout: {
+                            hierarchical: false
+                        },
+                        physics: {
+                            enabled: true,
+                            solver: 'forceAtlas2Based',
+                            forceAtlas2Based: {
+                                gravitationalConstant: -50,
+                                centralGravity: 0.005,
+                                springLength: 200,
+                                springConstant: 0.18
+                            },
+                            stabilization: {
+                                enabled: true,
+                                iterations: 1000
                             }
+                        },
+                        interaction: {
+                            dragNodes: true,
+                            dragView: true,
+                            zoomView: true,
+                            hover: true
+                        }
+                    };
+                    
+                    const network = new vis.Network(container, { nodes, edges }, options);
+
+                    // Fonction pour réinitialiser les styles
+                    function resetStyles() {
+                        // Créer des ensembles pour les différents types de tâches
+                        const incomingEdges = new Set();
+                        const outgoingEdges = new Set();
+                        const tasksWithRequires = new Set();
+
+                        edges.forEach(edge => {
+                            incomingEdges.add(edge.to);
+                            outgoingEdges.add(edge.from);
                         });
 
-                        // Mettre à jour le style des nœuds
+                        // Analyser les nœuds pour déterminer leur type
                         nodes.forEach(node => {
-                            const isConnected = connectedNodes.has(node.id);
-                            const isSelected = node.id === selectedNode;
+                            let originalColor;
+                            if (!incomingEdges.has(node.id)) {
+                                // Tâche source (sans dépendances entrantes)
+                                originalColor = '#FFC107';
+                            } else if (!outgoingEdges.has(node.id)) {
+                                // Tâche sans requires
+                                originalColor = '#FF69B4';
+                            } else {
+                                // Tâche intermédiaire
+                                originalColor = '#2196F3';
+                            }
                             
                             nodes.update({
                                 id: node.id,
                                 color: {
-                                    background: isSelected ? '#4CAF50' : (isConnected ? '#2196F3' : '#E0E0E0'),
-                                    border: isSelected ? '#388E3C' : (isConnected ? '#1976D2' : '#9E9E9E'),
+                                    background: originalColor,
+                                    border: originalColor,
                                     highlight: {
-                                        background: isSelected ? '#4CAF50' : (isConnected ? '#2196F3' : '#E0E0E0'),
-                                        border: isSelected ? '#388E3C' : (isConnected ? '#1976D2' : '#9E9E9E')
+                                        background: originalColor,
+                                        border: originalColor
                                     }
                                 },
                                 font: {
-                                    color: isSelected || isConnected ? '#FFFFFF' : '#000000',
-                                    size: isSelected ? 16 : 14,
+                                    color: '#000000',
+                                    size: 14,
                                     face: 'arial',
-                                    bold: isSelected
+                                    bold: false
                                 },
-                                shadow: isSelected || isConnected
+                                shadow: false
                             });
                         });
 
-                        // Mettre à jour le style des arêtes
                         edges.forEach(edge => {
-                            const isConnected = connectedEdges.has(edge.id);
                             edges.update({
                                 id: edge.id,
                                 color: {
-                                    color: isConnected ? '#2196F3' : '#E0E0E0',
-                                    highlight: isConnected ? '#2196F3' : '#E0E0E0',
-                                    opacity: isConnected ? 1.0 : 0.3
+                                    color: '#2196F3',
+                                    highlight: '#2196F3',
+                                    opacity: 1.0
                                 },
-                                width: isConnected ? 2 : 1,
-                                shadow: isConnected
+                                width: 2,
+                                shadow: false
                             });
                         });
                     }
-                });
 
-                // Réinitialiser les styles lors de la désélection
-                network.on('deselect', resetStyles);
+                    // Gestion de la sélection des nœuds
+                    network.on('select', function(params) {
+                        if (params.nodes.length > 0) {
+                            const selectedNode = params.nodes[0];
+                            const taskInfo = document.getElementById('task-info');
+                            const taskParameters = document.getElementById('task-parameters');
+                            const requiresInfo = document.getElementById('requires-info');
+                            
+                            // Trouver le nom de la tâche sélectionnée
+                            const selectedTask = nodes.get(selectedNode).label;
+                            
+                            // Afficher les paramètres de la tâche
+                            if (data.task_parameters && data.task_parameters[selectedTask]) {
+                                let paramsHtml = '<ul class="list-group">';
+                                data.task_parameters[selectedTask].forEach(param => {
+                                    paramsHtml += `
+                                        <li class="list-group-item">
+                                            <div class="d-flex justify-content-between align-items-center">
+                                                <div>
+                                                    <strong>${param.name}</strong>
+                                                    <span class="badge bg-secondary ms-2">${param.type}</span>
+                                                </div>
+                                                <small class="text-muted">Défaut: ${param.default}</small>
+                                            </div>
+                                        </li>
+                                    `;
+                                });
+                                paramsHtml += '</ul>';
+                                taskParameters.innerHTML = paramsHtml;
+                                taskInfo.style.display = 'block';
+                            } else {
+                                taskParameters.innerHTML = '<p>Aucun paramètre trouvé</p>';
+                                taskInfo.style.display = 'block';
+                            }
 
-                // Réinitialiser les styles lors d'un clic dans le vide
-                network.on('click', function(params) {
-                    if (params.nodes.length === 0) {
-                        resetStyles();
-                    }
-                });
-                
-                document.getElementById('hierarchical-layout').addEventListener('change', function(e) {
-                    options.layout.hierarchical = e.target.checked;
-                    if (e.target.checked) {
-                        options.layout.direction = 'UD';  // Up-Down direction
-                        options.layout.sortMethod = 'directed';
-                    }
-                    network.setOptions(options);
-                });
-                
-            } catch (error) {
-                errorMessage.textContent = `Erreur: ${error.message}`
-            } finally {
-                loading.style.display = 'none';
-            }
+                            // Cacher le panneau des requires
+                            requiresInfo.style.display = 'none';
+
+                            const connectedNodes = new Set();
+                            const connectedEdges = new Set();
+
+                            // Trouver tous les nœuds et arêtes connectés
+                            edges.forEach(edge => {
+                                if (edge.from === selectedNode || edge.to === selectedNode) {
+                                    connectedNodes.add(edge.from);
+                                    connectedNodes.add(edge.to);
+                                    connectedEdges.add(edge.id);
+                                }
+                            });
+
+                            // Mettre à jour le style des nœuds
+                            nodes.forEach(node => {
+                                const isConnected = connectedNodes.has(node.id);
+                                const isSelected = node.id === selectedNode;
+                                
+                                nodes.update({
+                                    id: node.id,
+                                    color: {
+                                        background: isSelected ? '#4CAF50' : (isConnected ? '#2196F3' : '#E0E0E0'),
+                                        border: isSelected ? '#388E3C' : (isConnected ? '#1976D2' : '#9E9E9E'),
+                                        highlight: {
+                                            background: isSelected ? '#4CAF50' : (isConnected ? '#2196F3' : '#E0E0E0'),
+                                            border: isSelected ? '#388E3C' : (isConnected ? '#1976D2' : '#9E9E9E')
+                                        }
+                                    },
+                                    font: {
+                                        color: isSelected || isConnected ? '#FFFFFF' : '#000000',
+                                        size: isSelected ? 16 : 14,
+                                        face: 'arial',
+                                        bold: isSelected
+                                    },
+                                    shadow: isSelected || isConnected
+                                });
+                            });
+
+                            // Mettre à jour le style des arêtes
+                            edges.forEach(edge => {
+                                const isConnected = connectedEdges.has(edge.id);
+                                edges.update({
+                                    id: edge.id,
+                                    color: {
+                                        color: isConnected ? '#2196F3' : '#E0E0E0',
+                                        highlight: isConnected ? '#2196F3' : '#E0E0E0',
+                                        opacity: isConnected ? 1.0 : 0.3
+                                    },
+                                    width: isConnected ? 2 : 1,
+                                    shadow: isConnected
+                                });
+                            });
+                        }
+                    });
+
+                    // Gestion du clic sur les arêtes
+                    network.on('click', function(params) {
+                        if (params.edges.length > 0) {
+                            const selectedEdge = params.edges[0];
+                            const requiresInfo = document.getElementById('requires-info');
+                            const requiresParameters = document.getElementById('requires-parameters');
+                            const taskInfo = document.getElementById('task-info');
+                            const taskParameters = document.getElementById('task-parameters');
+                            
+                            // Récupérer les nœuds source et cible
+                            const edge = edges.get(selectedEdge);
+                            const sourceNode = nodes.get(edge.from);
+                            const targetNode = nodes.get(edge.to);
+                            
+                            // Créer la clé pour les paramètres requires en utilisant l'ID de l'arête
+                            const requiresKey = `${edge.from}-${edge.to}-${edge.id}`;
+                            
+                            // Afficher les paramètres passés dans requires
+                            if (params.edges.length == 1 && data.requires_parameters && data.requires_parameters[requiresKey]) {
+                                let paramsHtml = `
+                                    <h6 class="mb-3">De ${sourceNode.label} à ${targetNode.label} (Appel #${edge.id})</h6>
+                                    <ul class="list-group">
+                                `;
+                                
+                                const requiresParams = data.requires_parameters[requiresKey];
+                                for (const [paramName, paramValue] of Object.entries(requiresParams)) {
+                                    paramsHtml += `
+                                        <li class="list-group-item">
+                                            <div class="d-flex justify-content-between align-items-center">
+                                                <div>
+                                                    <strong>${paramName}</strong>
+                                                </div>
+                                                <small class="text-muted">Valeur: ${paramValue}</small>
+                                            </div>
+                                        </li>
+                                    `;
+                                }
+                                paramsHtml += '</ul>';
+                                requiresParameters.innerHTML = paramsHtml;
+                                requiresInfo.style.display = 'block';
+                            } else {
+                                requiresParameters.innerHTML = `
+                                    <h6 class="mb-3">Aucun paramètre passé de ${sourceNode.label} à ${targetNode.label} (Appel #${edge.id})</h6>
+                                `;
+                                requiresInfo.style.display = 'none';
+                            }
+
+                            // Afficher les paramètres de la tâche cible
+                            if (data.task_parameters && data.task_parameters[targetNode.label]) {
+                                let paramsHtml = '<ul class="list-group">';
+                                data.task_parameters[targetNode.label].forEach(param => {
+                                    paramsHtml += `
+                                        <li class="list-group-item">
+                                            <div class="d-flex justify-content-between align-items-center">
+                                                <div>
+                                                    <strong>${param.name}</strong>
+                                                    <span class="badge bg-secondary ms-2">${param.type}</span>
+                                                </div>
+                                                <small class="text-muted">Défaut: ${param.default}</small>
+                                            </div>
+                                        </li>
+                                    `;
+                                });
+                                paramsHtml += '</ul>';
+                                taskParameters.innerHTML = paramsHtml;
+                                taskInfo.style.display = 'block';
+                            } else {
+                                taskParameters.innerHTML = '<p>Aucun paramètre trouvé</p>';
+                                taskInfo.style.display = 'block';
+                            }
+                        } else if (params.nodes.length === 0) {
+                            // Clic dans le vide
+                            resetStyles();
+                            document.getElementById('requires-info').style.display = 'none';
+                            document.getElementById('task-info').style.display = 'none';
+                        }
+                    });
+
+                    // Modifier la gestion de la désélection
+                    network.on('deselect', function(params) {
+                        if (params.edges.length === 0) {
+                            document.getElementById('requires-info').style.display = 'none';
+                            resetStyles();
+                        }
+                    });
+                    
+                    document.getElementById('hierarchical-layout').addEventListener('change', function(e) {
+                        options.layout.hierarchical = e.target.checked;
+                        if (e.target.checked) {
+                            options.layout.direction = 'UD';  // Up-Down direction
+                            options.layout.sortMethod = 'directed';
+                        }
+                        network.setOptions(options);
+                    });
+                    
+                } catch (error) {
+                    errorMessage.textContent = `Erreur: ${error.message}`;
+                } finally {
+                    loading.style.display = 'none';
+                }
+            });
         });
     </script>
 </body>
